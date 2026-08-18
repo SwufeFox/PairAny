@@ -2,7 +2,8 @@
 
 专业级 Binance 现货 K 线终端，支持**虚拟交易对（合成对）**、实时 WebSocket 行情、可扩展指标系统、多语言与色觉友好配色。纯前端，无需后端、无需 API Key。
 
-> 原名 USD2Any。选择两个现货标的（如 BTC、DOGE），即可查看 **BTC/DOGE = BTCUSDT ÷ DOGEUSDT** 的合成 K 线；若存在真实直接交易对（如 ETHBTC），会自动使用直接对。
+<img width="800" height="400" alt="image" src="https://github.com/user-attachments/assets/d1004048-fc2b-463e-a67b-498543fc44b4" />
+
 
 ## 功能
 
