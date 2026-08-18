@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+@import '@appica/ui-react/styles.css';
+
+@source '../node_modules/@appica/ui-react/dist';
+
+/* ============================================================
+ * Chart design tokens.
+ *
+ * The chart is drawn on a <canvas>, so it cannot use Tailwind
+ * utilities. It reads these raw CSS custom properties at render
+ * time via getComputedStyle. Light/dark flip the base values;
+ * color-blind mode classes override up/down after them, so the
+ * palette never depends on red/green alone.
+ * ============================================================ */
+
+:root,
+.light {
+  --chart-up: oklch(0.62 0.16 152);
+  --chart-down: oklch(0.58 0.21 27);
+  --chart-grid: oklch(0.16 0.02 260 / 8%);
+  --chart-grid-strong: oklch(0.16 0.02 260 / 14%);
+  --chart-crosshair: oklch(0.16 0.02 260 / 62%);
+  --chart-axis-text: oklch(0.3 0.02 260);
+  --chart-ind-1: oklch(0.55 0.19 255);
+  --chart-ind-2: oklch(0.58 0.13 200);
+  --chart-ind-3: oklch(0.56 0.24 330);
+  --chart-ind-4: oklch(0.64 0.17 60);
+  --chart-ind-5: oklch(0.55 0.21 300);
+  --chart-ind-6: oklch(0.72 0.15 95);
+  --chart-ind-7: oklch(0.6 0.17 135);
+  --chart-ind-8: oklch(0.62 0.21 350);
+}
+
+.dark {
+  --chart-up: oklch(0.72 0.16 152);
+  --chart-down: oklch(0.66 0.2 27);
+  --chart-grid: oklch(0.92 0.01 260 / 7%);
+  --chart-grid-strong: oklch(0.92 0.01 260 / 13%);
+  --chart-crosshair: oklch(0.92 0.01 260 / 55%);
+  --chart-axis-text: oklch(0.8 0.01 260);
+  --chart-ind-1: oklch(0.72 0.15 255);
+  --chart-ind-2: oklch(0.75 0.11 200);
+  --chart-ind-3: oklch(0.72 0.2 330);
+  --chart-ind-4: oklch(0.78 0.15 60);
+  --chart-ind-5: oklch(0.72 0.17 300);
+  --chart-ind-6: oklch(0.82 0.13 95);
+  --chart-ind-7: oklch(0.76 0.14 135);
+  --chart-ind-8: oklch(0.76 0.17 350);
+}
+
+/* ---- Color-blind friendly palettes ----
+ * Each mode pairs two hues that stay discriminable under that
+ * deficiency, in both themes. Up/down drive candles, volume,
+ * crosshair legend and change text alike, so nothing in the
+ * chart depends on red vs green. */
+
+/* Red-Green Safe: blue / amber */
+.cb-rg-safe {
+  --chart-up: oklch(0.6 0.17 245);
+  --chart-down: oklch(0.7 0.17 65);
+}
+.cb-rg-safe.dark {
+  --chart-up: oklch(0.72 0.15 245);
+  --chart-down: oklch(0.78 0.15 65);
+}
+
+/* Deuteranopia: teal / amber-orange */
+.cb-deuteranopia {
+  --chart-up: oklch(0.64 0.13 220);
+  --chart-down: oklch(0.68 0.17 58);
+}
+.cb-deuteranopia.dark {
+  --chart-up: oklch(0.75 0.11 220);
+  --chart-down: oklch(0.76 0.15 58);
+}
+
+/* Protanopia: blue / orange */
+.cb-protanopia {
+  --chart-up: oklch(0.62 0.18 255);
+  --chart-down: oklch(0.69 0.17 70);
+}
+.cb-protanopia.dark {
+  --chart-up: oklch(0.74 0.14 255);
+  --chart-down: oklch(0.77 0.15 70);
+}
+
+/* Tritanopia: green / deep magenta-red */
+.cb-tritanopia {
+  --chart-up: oklch(0.64 0.16 148);
+  --chart-down: oklch(0.58 0.22 8);
+}
+.cb-tritanopia.dark {
+  --chart-up: oklch(0.74 0.15 148);
+  --chart-down: oklch(0.68 0.18 8);
+}
+
+/* ---- Terminal chrome tweaks ---- */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+/* The chart canvas must never trigger text selection while dragging. */
+.chart-surface {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+/* Dense mono numerics for price readouts. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
