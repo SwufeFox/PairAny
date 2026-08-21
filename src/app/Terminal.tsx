@@ -1,6 +1,6 @@
 /** Terminal layout: toolbar / chart (drawings, zoom, context menu) / status
  * bar, plus dialog orchestration, fullscreen, data window and shortcuts. */
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -17,15 +17,25 @@ import { DrawingToolbar } from '../components/toolbar/DrawingToolbar'
 import { ChartCanvas } from '../components/chart/ChartCanvas'
 import { ZoomControls } from '../components/chart/ZoomControls'
 import { StatusBar } from '../components/status/StatusBar'
-import { SymbolSelectorDialog } from '../components/symbol-selector/SymbolSelectorDialog'
-import { IndicatorDialog } from '../components/indicators/IndicatorDialog'
-import { SettingsDialog } from '../components/settings/SettingsDialog'
-import { CompareDialog } from '../components/compare/CompareDialog'
 import { STRINGS, format as fmt } from '../lib/i18n'
 import { useController, useControllerState } from './use-controller'
 import { installShortcuts } from './shortcuts'
 import { getChartEngine } from './chart-ref'
 import { formatPrice } from '../lib/format'
+
+// Dialogs are code-split: each pulls a different slice of the base-ui
+// component tree (Combobox ≈ 45K, Select/NumberField…), and none is needed
+// until the user opens it.
+const SymbolSelectorDialog = lazy(() =>
+  import('../components/symbol-selector/SymbolSelectorDialog').then((m) => ({ default: m.SymbolSelectorDialog })),
+)
+const IndicatorDialog = lazy(() =>
+  import('../components/indicators/IndicatorDialog').then((m) => ({ default: m.IndicatorDialog })),
+)
+const SettingsDialog = lazy(() =>
+  import('../components/settings/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
+)
+const CompareDialog = lazy(() => import('../components/compare/CompareDialog').then((m) => ({ default: m.CompareDialog })))
 
 type DialogState =
   | { kind: 'symbols'; focus: 'base' | 'quote' }
@@ -178,14 +188,16 @@ export function Terminal() {
 
       <StatusBar />
 
-      <SymbolSelectorDialog
-        open={dialog?.kind === 'symbols'}
-        onOpenChange={(open) => setDialog(open ? { kind: 'symbols', focus: 'base' } : null)}
-        focusSlot={dialog?.kind === 'symbols' ? dialog.focus : 'base'}
-      />
-      <IndicatorDialog open={dialog?.kind === 'indicators'} onOpenChange={(open) => setDialog(open ? { kind: 'indicators' } : null)} />
-      <SettingsDialog open={dialog?.kind === 'settings'} onOpenChange={(open) => setDialog(open ? { kind: 'settings' } : null)} />
-      <CompareDialog open={dialog?.kind === 'compare'} onOpenChange={(open) => setDialog(open ? { kind: 'compare' } : null)} />
+      <Suspense fallback={null}>
+        <SymbolSelectorDialog
+          open={dialog?.kind === 'symbols'}
+          onOpenChange={(open) => setDialog(open ? { kind: 'symbols', focus: 'base' } : null)}
+          focusSlot={dialog?.kind === 'symbols' ? dialog.focus : 'base'}
+        />
+        <IndicatorDialog open={dialog?.kind === 'indicators'} onOpenChange={(open) => setDialog(open ? { kind: 'indicators' } : null)} />
+        <SettingsDialog open={dialog?.kind === 'settings'} onOpenChange={(open) => setDialog(open ? { kind: 'settings' } : null)} />
+        <CompareDialog open={dialog?.kind === 'compare'} onOpenChange={(open) => setDialog(open ? { kind: 'compare' } : null)} />
+      </Suspense>
     </div>
   )
 }

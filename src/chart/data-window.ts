@@ -12,6 +12,8 @@ export interface DataWindowData {
   pairLabel: string
   openTime: number
   candle: Candle
+  /** Latest close — the "vs now" change % baseline. */
+  currentClose: number | null
   /** Localized volume-row label ('Volume' | 'Synthetic Volume (est.)' | 'Hidden'). */
   volumeLabel: string
   legs: Array<{ symbol: string; close: number | null }>
@@ -24,6 +26,8 @@ export interface DataWindowData {
     close: string
     change: string
     changePct: string
+    /** "vs now" relative-change label, e.g. 对现价 / vs Current. */
+    vsNow: string
     syntheticClose: string
     closeSuffix: string
   }
@@ -66,6 +70,12 @@ export function renderDataWindow(root: HTMLElement, data: DataWindowData | null)
   frag.append(row(data.labels.close, formatPrice(candle.close)))
   frag.append(row(data.labels.change, formatChange(change), dir))
   frag.append(row(data.labels.changePct, formatPercent(pct), dir))
+  // Hovered close relative to the CURRENT price, colored by direction.
+  if (data.currentClose !== null && data.currentClose > 0) {
+    const vsPct = ((candle.close - data.currentClose) / data.currentClose) * 100
+    const vsDir = vsPct >= 0 ? 'text-(--chart-up)' : 'text-(--chart-down)'
+    frag.append(row(data.labels.vsNow, formatPercent(vsPct), vsDir))
+  }
   if (data.volumeLabel !== 'Hidden') {
     frag.append(row(data.volumeLabel, formatCompact(candle.volume)))
   }

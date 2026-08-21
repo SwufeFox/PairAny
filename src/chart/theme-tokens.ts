@@ -9,7 +9,38 @@ function cssVar(name: string, fallback: string): string {
   return v.length > 0 ? v : fallback
 }
 
+/**
+ * Theme tokens, cached per (theme × color-blind mode) signature.
+ *
+ * `draw()` used to call `readChartTokens()` every frame — 20+
+ * `getComputedStyle` reads per rAF. The token set only changes when the
+ * theme class or a color-blind class on <html> changes, so we cache by that
+ * signature and re-read only when it flips (or the cache is invalidated).
+ */
+let cache: ChartThemeTokens | null = null
+let cacheKey = ''
+
+/** Drop the cached tokens (call after programmatic class mutations). */
+export function invalidateChartTokens(): void {
+  cache = null
+  cacheKey = ''
+}
+
+function themeSignature(): string {
+  const root = document.documentElement.classList
+  return `${root.contains('dark') ? 'd' : 'l'}|${root.contains('cb-rg-safe') ? 'r' : ''}${root.contains('cb-deuteranopia') ? 'D' : ''}${root.contains('cb-protanopia') ? 'P' : ''}${root.contains('cb-tritanopia') ? 'T' : ''}`
+}
+
 export function readChartTokens(): ChartThemeTokens {
+  const key = themeSignature()
+  if (cache && key === cacheKey) return cache
+  const tokens = readTokens()
+  cache = tokens
+  cacheKey = key
+  return tokens
+}
+
+function readTokens(): ChartThemeTokens {
   return {
     up: cssVar('--chart-up', '#22c55e'),
     down: cssVar('--chart-down', '#ef4444'),
@@ -26,3 +57,4 @@ export function readChartTokens(): ChartThemeTokens {
     ind: IND_TOKENS.map((t) => cssVar(`--chart-${t}`, '#3b82f6')),
   }
 }
+

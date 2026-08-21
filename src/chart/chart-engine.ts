@@ -77,6 +77,8 @@ export class ChartEngine {
   /** Manual price-range overrides per pane (right-axis drag/wheel). */
   private priceOverrides = new Map<string, { lo: number; hi: number }>()
   private pricePanning: { paneId: string; startY: number; lo: number; hi: number; span: number } | null = null
+  /** Cached from the latest input — drawing anchors map time↔index with it. */
+  private intervalMs = 60_000
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -92,6 +94,7 @@ export class ChartEngine {
     const versionChanged = input.data.version !== this.lastVersion
     this.lastVersion = input.data.version
     if (versionChanged) this.historyRequested = false
+    this.intervalMs = input.intervalMs
     const prevLen = this.input?.data.candles.length ?? 0
     const len = input.data.candles.length
     this.input = input
@@ -132,20 +135,6 @@ export class ChartEngine {
     this.ctx.setTransform(ratioX, 0, 0, ratioY, 0, 0)
   }
 
-  /** Re-sync the backing store when the OS/browser zoom scale changes the
-   * container layout (the canvas CSS size is pinned, so compare the parent). */
-  private checkDisplayScale(): void {
-    const parent = this.canvas.parentElement
-    if (!parent) return
-    const cssW = parent.clientWidth
-    const cssH = parent.clientHeight
-    if (cssW > 0 && (cssW !== this.width || cssH !== this.height)) {
-      this.width = cssW
-      this.height = cssH
-      this.applyBackingStore()
-    }
-  }
-
   fit(): void {
     const len = this.input?.data.candles.length ?? 0
     if (len > 0) this.setView({ start: 0, count: len })
@@ -167,14 +156,6 @@ export class ChartEngine {
 
   panBy(deltaCandles: number): void {
     this.setView({ start: this.view.start + deltaCandles, count: this.view.count })
-  }
-
-  toggleLog(): void {
-    const prefs = this.input?.prefs
-    if (prefs) {
-      this.input = { ...this.input as ChartEngineInput, prefs: { ...prefs, logScale: !prefs.logScale } }
-    }
-    this.requestRender()
   }
 
   get visibleCount(): number {
@@ -213,7 +194,6 @@ export class ChartEngine {
     requestAnimationFrame(() => {
       this.renderPending = false
       if (this.disposed) return
-      this.checkDisplayScale()
       this.draw()
     })
   }
@@ -275,7 +255,7 @@ export class ChartEngine {
     if (this.drawingTool) {
       const anchor = this.anchorAt(pt.x, pt.y)
       if (anchor) {
-        this.activeDrawing = { id: 0, type: this.drawingTool, i1: anchor.i, p1: anchor.p, i2: anchor.i, p2: anchor.p }
+        this.activeDrawing = { id: 0, type: this.drawingTool, t1: anchor.t, p1: anchor.p, t2: anchor.t, p2: anchor.p }
         this.canvas.setPointerCapture(e.pointerId)
       }
       return
@@ -305,7 +285,7 @@ export class ChartEngine {
     if (this.activeDrawing) {
       const anchor = this.anchorAt(pt.x, pt.y)
       if (anchor && this.activeDrawing) {
-        this.activeDrawing = { ...this.activeDrawing, i2: anchor.i, p2: anchor.p }
+        this.activeDrawing = { ...this.activeDrawing, t2: anchor.t, p2: anchor.p }
         this.requestRender()
       }
       return
@@ -382,7 +362,7 @@ export class ChartEngine {
     if (this.activeDrawing) {
       const d = this.activeDrawing
       // Commit only when the gesture has real extent.
-      const moved = Math.abs(d.i2 - d.i1) > 0.5 || Math.abs(d.p2 - d.p1) > 0
+      const moved = Math.abs(d.t2 - d.t1) > 1 || Math.abs(d.p2 - d.p1) > 0
       if (moved) {
         this.drawings.push({ ...d, id: this.nextDrawingId++ })
       }
@@ -480,8 +460,9 @@ export class ChartEngine {
     return Math.max(1, this.width - 6 - RIGHT_AXIS_W)
   }
 
-  /** Pixel → (candle index, price) anchor in the main pane (drawing tools). */
-  private anchorAt(x: number, y: number): { i: number; p: number } | null {
+  /** Pixel → (openTime, price) anchor in the main pane (drawing tools).
+   * Time is interpolated off the view so off-grid clicks stay stable. */
+  private anchorAt(x: number, y: number): { t: number; p: number } | null {
     const input = this.input
     if (!input || input.data.candles.length === 0) return null
     const layout = this.computeLayout(input)
@@ -493,8 +474,15 @@ export class ChartEngine {
     main.scale.setDomain(main.domain.lo, main.domain.hi, main.top + 4, main.top + main.height - 4)
     main.scale.logMode = input.prefs.logScale
     const plotW = this.plotWidth()
-    const i = ((x - layout.left) / Math.max(1, plotW)) * this.view.count + this.view.start
-    return { i: Math.max(0, Math.min(input.data.candles.length - 1, i)), p: main.scale.valueAt(y) }
+    const idxF = ((x - layout.left) / Math.max(1, plotW)) * this.view.count + this.view.start
+    // Index → openTime via the interval grid; clamp to loaded range so a
+    // click past the newest candle still lands on the last candle's grid.
+    const len = input.data.candles.length
+    const step = input.intervalMs
+    const clampedI = Math.max(0, Math.min(len - 1, idxF))
+    const baseT = input.data.candles[Math.round(clampedI)]?.openTime
+    const t = baseT !== undefined ? baseT + (idxF - Math.round(clampedI)) * step : 0
+    return { t, p: main.scale.valueAt(y) }
   }
 
   // ---- layout ----
@@ -1033,16 +1021,19 @@ export class ChartEngine {
   ): void {
     const ch = this.crosshair
     if (!ch) return
-    console.log('[xhair] draw ' + JSON.stringify({ x: ch.x, y: ch.y, index: ch.index }))
     // The vertical line follows the pointer exactly (no candle snapping).
+    // A wider translucent under-stroke keeps it readable over dense candles.
     const x = Math.max(plotLeft, Math.min(plotRight, ch.x))
     ctx.strokeStyle = tokens.crosshair
-    ctx.lineWidth = 1
     ctx.setLineDash([4, 3])
+    ctx.lineWidth = 3
+    ctx.globalAlpha = 0.25
     ctx.beginPath()
     ctx.moveTo(x, HEADER_H + PAD_TOP)
     ctx.lineTo(x, this.height - layout.bottom)
     ctx.stroke()
+    ctx.globalAlpha = 1
+    ctx.lineWidth = 1
     const hoveredPane = paneAt(ch.y, layout.panes)
     if (hoveredPane) {
       ctx.beginPath()
@@ -1068,16 +1059,19 @@ export class ChartEngine {
     }
 
     // Price pill (hovered pane's scale). On the main pane it stacks the
-    // price over the hovered candle's change %, colored by direction.
+    // hovered price over its change % RELATIVE TO THE CURRENT PRICE
+    // (last close), colored by direction — so the readout answers "where is
+    // this level versus now", not "what did that candle do".
     if (hoveredPane && ch.price !== null && Number.isFinite(ch.price)) {
       const isMain = (hoveredPane as Pane).kind === 'main'
       const priceLabel = formatPrice(ch.price, isMain ? 6 : 5)
       let pctLabel = ''
       let textColor = tokens.foregroundInverse
       if (isMain) {
-        const c = input.data.candles[ch.index]
-        if (c) {
-          const pct = c.open !== 0 ? ((c.close - c.open) / c.open) * 100 : 0
+        const candles = input.data.candles
+        const current = candles[candles.length - 1]?.close
+        if (current !== undefined && current > 0) {
+          const pct = ((ch.price - current) / current) * 100
           pctLabel = formatPercent(pct)
           textColor = pct >= 0 ? tokens.up : tokens.down
         }
@@ -1098,7 +1092,6 @@ export class ChartEngine {
       }
     }
   }
-
   private drawDrawing(
     d: Drawing,
     ctx: CanvasRenderingContext2D,
@@ -1112,7 +1105,8 @@ export class ChartEngine {
     ctx.strokeStyle = color
     ctx.fillStyle = color
     ctx.lineWidth = 1.2
-    const x1 = Math.max(plotLeft, Math.min(plotRight, xFor(d.i1)))
+    const xForTime = (t: number): number => xFor(this.timeToIndex(t))
+    const x1 = Math.max(plotLeft, Math.min(plotRight, xForTime(d.t1)))
     const y1 = scale.yFor(d.p1)
     ctx.beginPath()
     if (d.type === 'horizontal') {
@@ -1121,7 +1115,7 @@ export class ChartEngine {
       ctx.stroke()
       return
     }
-    const x2 = Math.max(plotLeft, Math.min(plotRight, xFor(d.i2)))
+    const x2 = Math.max(plotLeft, Math.min(plotRight, xForTime(d.t2)))
     const y2 = scale.yFor(d.p2)
     if (d.type === 'rectangle') {
       ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1))
@@ -1141,6 +1135,15 @@ export class ChartEngine {
       ctx.lineTo(x2 - head * Math.cos(angle + 0.4), y2 - head * Math.sin(angle + 0.4))
       ctx.stroke()
     }
+  }
+
+  /** openTime → fractional candle index via the interval grid anchored at
+   * the first loaded candle. Stable across history loads (indices shift,
+   * the time grid does not). */
+  private timeToIndex(t: number): number {
+    const candles = this.input?.data.candles
+    if (!candles || candles.length === 0 || this.intervalMs <= 0) return 0
+    return (t - (candles[0] as Candle).openTime) / this.intervalMs
   }
 
   private drawPlaceholder(

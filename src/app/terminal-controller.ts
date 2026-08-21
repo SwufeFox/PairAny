@@ -17,6 +17,7 @@ import { IndicatorEngine } from '../indicators/indicator-engine'
 import { registerAllIndicators } from '../indicators/registry'
 import type { CandleStore } from '../market/candle-store'
 import { Emitter } from '../lib/events'
+import { intervalToMs } from '../lib/interval'
 import { loadSettings, saveSettings } from '../settings/persistence'
 import type { PairMode, PersistedSettings } from '../settings/persistence'
 import { applyColorBlindMode } from '../settings/color-blind'
@@ -67,8 +68,14 @@ export class TerminalController {
   private compareStore: CandleStore | null = null
   private compareUnsub: (() => void) | null = null
   private structuralPending = true
+  /** Controller-owned monotonic snapshot version. Store versions can collide
+   * across direct/synthetic switches (e.g. 5 → 3+2), which made
+   * IndicatorEngine.setData skip the recompute and serve stale indicators. */
+  private snapshotVersion = 0
+  /** Bumped on pair/interval switches so the canvas can reset its view. */
   private chartEpoch = 0
   private snapshot: SeriesSnapshot | null = null
+  private compareCache: { storeVersion: number; mainRef: readonly unknown[] | null; values: Float64Array } | null = null
   private chartInput: ChartEngineInput | null = null
   private exchangeError: string | null = null
   private pairErrorKey: PairErrorKey | null = null
@@ -574,7 +581,7 @@ export class TerminalController {
       const last = candles[candles.length - 1]
       return {
         candles,
-        version: store.version,
+        version: ++this.snapshotVersion,
         isSynthetic: false,
         volumeMode: this.getVolumeMode(),
         legs: [{ symbol: first, close: last?.close ?? null }],
@@ -592,7 +599,7 @@ export class TerminalController {
     const b = second ? this.market.getLeg(second)?.getLast() : undefined
     return {
       candles: series.candles,
-      version: series.version,
+      version: ++this.snapshotVersion,
       isSynthetic: true,
       volumeMode: this.getVolumeMode(),
       legs: [
@@ -606,13 +613,27 @@ export class TerminalController {
     }
   }
 
+  /** Compare series, cached by compare-store version. Rebuilding the
+   * openTime map on every WS tick dominated the per-tick budget when a
+   * compare leg was active; the aligned array only changes when either the
+   * compare store or the main snapshot changes. */
   private buildCompareSeries(): CompareSeries | null {
     if (!this.compareSymbolValue || !this.compareStore) return null
     const compareCandles = this.compareStore.getCandles()
     if (compareCandles.length === 0) return null
+    const storeVersion = this.compareStore.version
+    const candles = this.snapshot?.candles ?? []
+    const cached = this.compareCache
+    if (
+      cached &&
+      cached.storeVersion === storeVersion &&
+      cached.mainRef === (this.snapshot?.candles ?? null) &&
+      cached.values.length === candles.length
+    ) {
+      return { label: this.compareSymbolValue, values: cached.values, colorIndex: 7 }
+    }
     const map = new Map<number, number>()
     for (const c of compareCandles) map.set(c.openTime, c.close)
-    const candles = this.snapshot?.candles ?? []
     const values = new Float64Array(candles.length).fill(NaN)
     for (let i = 0; i < candles.length; i++) {
       const c = candles[i]
@@ -620,6 +641,7 @@ export class TerminalController {
       const v = map.get(c.openTime)
       if (v !== undefined) values[i] = v
     }
+    this.compareCache = { storeVersion, mainRef: this.snapshot?.candles ?? null, values }
     return { label: this.compareSymbolValue, values, colorIndex: 7 }
   }
 
@@ -657,6 +679,7 @@ export class TerminalController {
       compare: this.buildCompareSeries(),
       prefs: this.chartPrefs,
       interval: this.settings.interval,
+      intervalMs: intervalToMs(this.settings.interval),
       i18n: this.chartStrings(),
     }
     this.chartEmitter.emit()

@@ -113,6 +113,7 @@ export interface I18n {
     close: string
     change: string
     changePct: string
+    vsNow: string
     volume: string
     syntheticVolume: string
     hidden: string
@@ -264,6 +265,7 @@ const EN: I18n = {
     close: 'Close',
     change: 'Change',
     changePct: 'Change %',
+    vsNow: 'vs Current',
     volume: 'Volume',
     syntheticVolume: 'Synthetic Volume (est.)',
     hidden: 'Hidden',
@@ -424,6 +426,7 @@ const ZH: I18n = {
     close: '收盘',
     change: '涨跌',
     changePct: '涨跌幅',
+    vsNow: '对现价',
     volume: '成交量',
     syntheticVolume: '合成成交量（估算）',
     hidden: '隐藏',
@@ -584,6 +587,7 @@ const JA: I18n = {
     close: '終値',
     change: '変化',
     changePct: '変化率',
+    vsNow: '現在値比',
     volume: '出来高',
     syntheticVolume: '合成出来高（推定）',
     hidden: '非表示',

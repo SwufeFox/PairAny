@@ -18,6 +18,8 @@ export class CandleStore {
   private candles: Candle[] = []
   private index = new Map<number, number>()
   private versionCounter = 0
+  /** >0 while a batch merge is in flight; per-upsert emits are suppressed. */
+  private emitDepth = 0
   private emitter = new Emitter<number>()
   private moreOlder = true
 
@@ -56,16 +58,29 @@ export class CandleStore {
     return 'added'
   }
 
-  /** Merge an ascending REST batch. Returns counts for diagnostics. */
+  /**
+   * Merge an ascending REST batch. Returns counts for diagnostics.
+   * Emissions are coalesced: one notify per batch instead of one per candle
+   * (a 1000-candle backfill must not trigger 1000 downstream rebuilds).
+   */
   merge(ascending: readonly Candle[]): { added: number; updated: number; ignored: number } {
     let added = 0
     let updated = 0
     let ignored = 0
-    for (const c of ascending) {
-      const r = this.upsert(c)
-      if (r === 'added') added++
-      else if (r === 'updated') updated++
-      else ignored++
+    const changedBefore = this.versionCounter
+    this.emitDepth++
+    try {
+      for (const c of ascending) {
+        const r = this.upsert(c)
+        if (r === 'added') added++
+        else if (r === 'updated') updated++
+        else ignored++
+      }
+    } finally {
+      this.emitDepth--
+    }
+    if (this.versionCounter !== changedBefore && this.emitDepth === 0) {
+      this.emitter.emit(this.versionCounter)
     }
     return { added, updated, ignored }
   }
@@ -108,7 +123,7 @@ export class CandleStore {
 
   private bump(): void {
     this.versionCounter++
-    this.emitter.emit(this.versionCounter)
+    if (this.emitDepth === 0) this.emitter.emit(this.versionCounter)
   }
 
   private rebuildIndex(): void {

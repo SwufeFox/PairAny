@@ -32,7 +32,6 @@ export class IndicatorEngine {
   private data: readonly Candle[] = []
   private dataVersion = -1
   private changeEmitter = new Emitter<void>()
-  private dataEmitter = new Emitter<void>()
 
   register(def: IndicatorDefinition): void {
     this.defs.set(def.id, def)
@@ -102,15 +101,7 @@ export class IndicatorEngine {
       this.recomputeEntry(entry, structural)
     }
     // Data recompute: chart-only signal (never a React re-render trigger).
-    this.emitData()
-  }
-
-  /** Full recompute of every instance (pair/interval switch, history prepend). */
-  reset(): void {
-    for (const entry of this.entries.values()) {
-      this.recomputeEntry(entry, true)
-    }
-    this.emitData()
+    // (No separate data emitter — chart redraws are driven by the controller.)
   }
 
   listInstances(): IndicatorInstance[] {
@@ -139,31 +130,13 @@ export class IndicatorEngine {
     return out
   }
 
-  /** Definitions whose pane the chart should allocate (pane-placed, visible). */
-  hasPanes(): boolean {
-    for (const entry of this.entries.values()) {
-      if (entry.instance.visible && entry.instance.placement === 'pane') return true
-    }
-    return false
-  }
-
   /** Instance-structure changes (add/remove/update) — React-visible. */
   subscribe(fn: () => void): () => void {
     return this.changeEmitter.subscribe(fn)
   }
 
-  /** Data recomputes (per tick) — chart-only. */
-  subscribeData(fn: () => void): () => void {
-    return this.dataEmitter.subscribe(fn)
-  }
-
   private emitChange(): void {
     this.changeEmitter.emit()
-    this.dataEmitter.emit()
-  }
-
-  private emitData(): void {
-    this.dataEmitter.emit()
   }
 
   private nextColorOffset(definitionId: string): number {

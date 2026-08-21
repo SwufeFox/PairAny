@@ -30,7 +30,7 @@ npm start        # 或 npm run dev → http://localhost:5173
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest（56 个用例）
+npm test            # vitest（51 个用例）
 npm run build       # 产物 dist/
 npm run preview     # 本地预览构建产物
 ```
@@ -104,7 +104,7 @@ OHLC 无法还原两腿价格路径内的真实极值，四角包络是可由 OH
 
 ## 测试
 
-Vitest，56 个用例覆盖：合成对比率与倒数恒等（ETH/BTC = 1/(BTC/ETH)）、蜡烛同步（缺失/重复/乱序）、指标（MA/EMA/RSI/MACD/布林 + 0/1/不足/大数据边界 + 增量与全量一致性）、WebSocket（连接/消息/重复/乱序/断线/重连）、i18n 完整性、格式化精度。
+Vitest，51 个用例覆盖：合成对比率与倒数恒等（ETH/BTC = 1/(BTC/ETH)）、蜡烛同步（缺失/重复/乱序）、指标（MA/EMA/RSI/MACD/布林 + 0/1/不足/大数据边界 + 增量与全量一致性）、WebSocket（连接/消息/重复/乱序/断线/重连）、i18n 完整性、格式化精度。
 
 ## 免责声明
 

@@ -29,9 +29,6 @@ export const WS_PING_INTERVAL_MS = 30_000
 export const WS_PONG_TIMEOUT_MS = 15_000
 export const WS_MAX_BACKOFF_MS = 30_000
 
-/** Default quote used to build the two legs of a synthetic pair. */
-export const DEFAULT_LEG_QUOTE = 'USDT'
-
 export function klinesPath(symbol: string, interval: string, limit: number): string {
   return `${REST_BASE_URL}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`
 }

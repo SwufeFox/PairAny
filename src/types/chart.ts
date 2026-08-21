@@ -73,6 +73,8 @@ export interface ChartEngineInput {
   compare: CompareSeries | null
   prefs: ChartPrefs
   interval: string
+  /** Interval duration in ms — drawing anchors map pixel→openTime with it. */
+  intervalMs: number
   i18n: ChartStrings
 }
 
@@ -112,17 +114,19 @@ export interface ChartStrings {
   paneSyntheticVolume: string
 }
 
-/** Drawing tools: anchored to (candle index, price) so they survive pan/zoom. */
+/** Drawing tools: anchored to (openTime, price) so they survive pan/zoom AND
+ * history loads — array indices shift when older candles are prepended,
+ * timestamps do not. */
 export type DrawingTool = 'trendline' | 'horizontal' | 'rectangle' | 'arrow'
 
 export interface Drawing {
   id: number
   type: DrawingTool
-  /** Anchor 1 in (index, price) space. */
-  i1: number
+  /** Anchor 1: candle openTime (epoch ms, interpolated off-grid) + price. */
+  t1: number
   p1: number
-  /** Anchor 2 in (index, price) space. */
-  i2: number
+  /** Anchor 2: same space. */
+  t2: number
   p2: number
 }
 

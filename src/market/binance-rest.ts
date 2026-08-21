@@ -78,15 +78,30 @@ export function fetchExchangeInfo(force = false): Promise<ExchangeInfo> {
       if (!Array.isArray(data.symbols)) {
         throw new BinanceRestError('Unexpected exchangeInfo payload', null)
       }
+      // Keep only the fields the app reads; the raw payload carries ~15
+      // unused fields per symbol (precisions, order types, …) that would
+      // otherwise sit in memory for thousands of symbols.
       exchangeInfoCache = {
         serverTime: typeof data.serverTime === 'number' ? data.serverTime : Date.now(),
-        symbols: (data.symbols as SymbolInfo[]).filter(
-          (s) =>
-            typeof s.symbol === 'string' &&
-            typeof s.baseAsset === 'string' &&
-            typeof s.quoteAsset === 'string' &&
-            Array.isArray(s.filters),
-        ),
+        symbols: (data.symbols as SymbolInfo[])
+          .filter(
+            (s) =>
+              typeof s.symbol === 'string' &&
+              typeof s.baseAsset === 'string' &&
+              typeof s.quoteAsset === 'string' &&
+              Array.isArray(s.filters),
+          )
+          .map((s) => ({
+            symbol: s.symbol,
+            baseAsset: s.baseAsset,
+            quoteAsset: s.quoteAsset,
+            status: s.status,
+            permissions: Array.isArray(s.permissions) ? s.permissions : [],
+            permissionSets: Array.isArray(s.permissionSets) ? s.permissionSets : undefined,
+            baseAssetPrecision: 0,
+            quoteAssetPrecision: 0,
+            filters: s.filters.filter((f) => f.filterType === 'PRICE_FILTER'),
+          })),
       }
       return exchangeInfoCache
     } finally {
@@ -97,6 +112,3 @@ export function fetchExchangeInfo(force = false): Promise<ExchangeInfo> {
   return exchangeInfoPromise
 }
 
-export function resetExchangeInfoCache(): void {
-  exchangeInfoCache = null
-}
